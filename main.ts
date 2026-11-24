@@ -1,82 +1,39 @@
 // SPDX-License-Identifier: MIT
-// Make the AI Judge Laugh: the Office Joke Open — entry program.
-// Node 22, standard library only. Writes one single-line office joke to
-// /output/entry.txt, checks the competition gate first, then reads the file
-// back and confirms the bytes match exactly.
-
+// Make the AI Judge Laugh: the Office Joke Open.
+// Writes one single-line office joke (at most 200 characters) to /output/entry.txt.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
 
-const ENTRY =
-  "My out-of-office reply has a better work-life balance than I do.";
+const JOKE =
+  "The office fridge says 'Label your food,' so someone labelled the milk 'Property of Greg.' Greg left in 2019.";
 
-const OUTPUT_PATH = process.env.ENTRY_OUTPUT ?? "/output/entry.txt";
-const MIN_CHARS = 1;
-const MAX_CHARS = 200;
-
-// Returns every gate violation found, or an empty list when the line is good.
-function checkEntry(line: string): string[] {
-  const problems: string[] = [];
-  const points = [...line];
-  if (points.length < MIN_CHARS || points.length > MAX_CHARS) {
-    problems.push(
-      `entry is ${points.length} characters, outside the ${MIN_CHARS}-${MAX_CHARS} range`,
-    );
+// Gate: one line, 1-200 characters counted by code points, no control
+// characters, no leading or trailing whitespace. Throws on any failure.
+function checkGate(text: string): number {
+  const points = [...text];
+  if (points.length < 1 || points.length > 200) {
+    throw new Error(`joke is ${points.length} characters, must be 1-200`);
   }
-  if (line.trim().length === 0) {
-    problems.push("entry is only whitespace");
+  if (text !== text.trim()) {
+    throw new Error("joke has leading or trailing whitespace");
   }
-  if (line !== line.trim()) {
-    problems.push("entry has leading or trailing whitespace");
-  }
-  for (const ch of line) {
-    if (ch === "\n" || ch === "\r") {
-      problems.push("entry spans more than one line");
-      break;
-    }
-  }
-  for (const ch of line) {
-    const code = ch.codePointAt(0) ?? 0;
+  for (const ch of points) {
+    const code = ch.codePointAt(0)!;
     if (code < 0x20 || code === 0x7f) {
-      problems.push("entry contains a control character");
-      break;
+      throw new Error(`joke holds a control character U+${code.toString(16).padStart(4, "0")}`);
     }
   }
-  return problems;
+  if (text.includes("\n") || text.includes("\r")) {
+    throw new Error("joke must be a single line");
+  }
+  return points.length;
 }
 
-const problems = checkEntry(ENTRY);
-if (problems.length > 0) {
-  for (const problem of problems) console.error(`FAIL: ${problem}`);
-  process.exit(1);
-}
+const length = checkGate(JOKE);
 
-// Confirms the file on disk is byte-for-byte the entry we meant to write:
-// same text, same byte length, same character count, still a single line.
-function verifyWritten(path: string, expected: string): void {
-  const back = readFileSync(path, "utf8");
-  if (back !== expected) {
-    console.error("FAIL: read-back text differs from the entry");
-    process.exit(1);
-  }
-  if (Buffer.byteLength(back, "utf8") !== Buffer.byteLength(expected, "utf8")) {
-    console.error("FAIL: read-back byte length differs from the entry");
-    process.exit(1);
-  }
-  if ([...back].length !== [...expected].length) {
-    console.error("FAIL: read-back character count differs from the entry");
-    process.exit(1);
-  }
-  if (checkEntry(back).length > 0) {
-    console.error("FAIL: read-back text no longer passes the gate");
-    process.exit(1);
-  }
-}
+mkdirSync("/output", { recursive: true });
+writeFileSync("/output/entry.txt", JOKE, "utf8");
 
-mkdirSync(dirname(OUTPUT_PATH), { recursive: true });
-writeFileSync(OUTPUT_PATH, ENTRY, "utf8");
+const back = readFileSync("/output/entry.txt", "utf8");
+if (back !== JOKE) throw new Error("read-back mismatch: entry.txt differs from the joke");
 
-verifyWritten(OUTPUT_PATH, ENTRY);
-
-console.log(`OK: wrote ${[...ENTRY].length} characters to ${OUTPUT_PATH}`);
-console.log(ENTRY);
+console.log(`wrote ${length} characters to /output/entry.txt`);
